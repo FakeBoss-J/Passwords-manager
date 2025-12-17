@@ -1,0 +1,30 @@
+[
+  {
+    "id": "961e2134-2e28-42ad-9bae-ede5cf7e198e",
+    "url": "https://dr.dpcm.vip/",
+    "username": "18668069908",
+    "owner": "姚总",
+    "tags": [
+      "客户-百思特"
+    ],
+    "passwordEncrypted": "U2FsdGVkX1+VybldXBUwCuCWtaOIoc6itYVLzwnu6Ec=",
+    "faviconUrl": "https://www.google.com/s2/favicons?domain=dr.dpcm.vip&sz=64",
+    "createdAt": "2025-12-15T08:18:56.829Z",
+    "updatedAt": "2025-12-15T08:36:44.765Z",
+    "category": "病程后台-正式环境"
+  },
+  {
+    "id": "20338c1e-7ec5-4eac-ac1c-447b66dfc320",
+    "url": "https://dr.dpcm.vip/",
+    "username": "15924132088",
+    "owner": "贾若颖",
+    "tags": [
+      "自己"
+    ],
+    "passwordEncrypted": "U2FsdGVkX1/R4B422VaOqd1qEa5bff6nY2KnJ9TanBM=",
+    "faviconUrl": "https://www.google.com/s2/favicons?domain=dr.dpcm.vip&sz=64",
+    "createdAt": "2025-12-15T07:42:41.762Z",
+    "updatedAt": "2025-12-15T08:38:04.726Z",
+    "category": "病程后台-正式环境"
+  }
+]

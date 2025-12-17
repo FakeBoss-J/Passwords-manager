@@ -1,0 +1,2172 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>SecureVault - 团队密码管理</title>
+    
+    <!-- Google Fonts & Icons -->
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    
+    <!-- Theme Configuration -->
+    <script id="tailwind-config">
+        try {
+            window.tailwind = window.tailwind || {};
+            window.tailwind.config = {
+                darkMode: "class",
+                theme: {
+                    extend: {
+                        colors: {
+                            "primary": "#137fec",
+                            "background-light": "#f6f7f8",
+                            "background-dark": "#101922",
+                            "surface-dark": "#16202a",
+                            "border-dark": "#2a3441",
+                        },
+                        fontFamily: {
+                            "display": ["Inter", "sans-serif"],
+                            "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"]
+                        },
+                        borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px" },
+                    },
+                },
+            };
+        } catch (e) {
+            /* ignore */
+        }
+    </script>
+    
+    <!-- Global Styles -->
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #101922; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2a3441; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3b4754; 
+        }
+        
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        /* Range Slider */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #137fec;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 0 2px rgba(0,0,0,0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #283039;
+            border-radius: 2px;
+        }
+    </style>
+
+    <!-- CryptoJS for encryption -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    
+    <!-- React Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/history@5/umd/history.development.js"></script>
+    <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"></script>
+    <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display">
+    <div id="root"></div>
+    <script type="text/babel">
+      (function () {
+        function libsReady() {
+          return !!(window.React && window.ReactDOM && window.Babel);
+        }
+        function encrypt(plain, key) {
+          if (!window.CryptoJS) throw new Error('CryptoJS 未加载，无法加密');
+          return window.CryptoJS.AES.encrypt(plain, key).toString();
+        }
+        function decrypt(encrypted, key) {
+          if (!window.CryptoJS) throw new Error('CryptoJS 未加载，无法解密');
+          var bytes = window.CryptoJS.AES.decrypt(encrypted, key);
+          return bytes.toString(window.CryptoJS.enc.Utf8);
+        }
+        function fetchJSON(path, method, body, token) {
+          // 使用相对路径以便在不同环境下正确访问API
+          const apiPath = path.startsWith('/') ? path : `/${path}`;
+          return fetch(apiPath, {
+            method: method || 'GET',
+            headers: Object.assign(
+              { 'Content-Type': 'application/json' },
+              token ? { Authorization: 'Bearer ' + token } : {}
+            ),
+            body: body ? JSON.stringify(body) : undefined,
+          }).then(async (r) => {
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+            return data;
+          });
+        }
+        function renderFallback() {
+          var el = document.getElementById('root');
+          el.innerHTML =
+            '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#101922;color:#fff;font-family:system-ui">' +
+            '<div style="width:420px;background:#16202a;border:1px solid #2a3441;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.3)">' +
+            '<h2 style="margin:0 0 10px;font-weight:800">SecureVault 本地回退</h2>' +
+            '<p style="margin:0 0 16px;color:#9dabb9;font-size:12px">检测到 CDN 资源不可用，已启用不依赖 React 的回退界面。</p>' +
+            '<label style="display:block;margin:10px 0 6px;font-size:12px">账号</label>' +
+            '<input id="f-user" style="width:100%;padding:10px;border-radius:8px;border:1px solid #3b4754;background:#1c2127;color:#fff" placeholder="用户名" />' +
+            '<label style="display:block;margin:10px 0 6px;font-size:12px">密码</label>' +
+            '<input id="f-pass" type="password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #3b4754;background:#1c2127;color:#fff" placeholder="密码（将作为主密钥）" />' +
+            '<div style="display:flex;align-items:center;gap:8px;margin:10px 0">' +
+            '<input id="f-reg" type="checkbox" />' +
+            '<span style="font-size:12px;color:#9dabb9">注册新账号</span>' +
+            '</div>' +
+            '<button id="f-login" style="width:100%;padding:10px;border-radius:8px;background:#137fec;color:#fff;font-weight:700">继续</button>' +
+            '<div id="f-msg" style="margin-top:10px;color:#ffb4b4;font-size:12px"></div>' +
+            '<hr style="border:none;border-top:1px solid #2a3441;margin:16px 0" />' +
+            '<div id="f-app" style="display:none">' +
+            '<div style="display:flex;gap:8px;margin-bottom:12px">' +
+            '<button id="f-load" style="padding:8px 10px;border-radius:8px;background:#2a3441;color:#fff">加载条目</button>' +
+            '<button id="f-to-add" style="padding:8px 10px;border-radius:8px;background:#137fec;color:#fff">添加条目</button>' +
+            '</div>' +
+            '<div id="f-add" style="display:none">' +
+            '<label style="display:block;margin:6px 0;font-size:12px">网址</label><input id="fa-url" style="width:100%;padding:8px;border-radius:8px;border:1px solid #3b4754;background:#1c2127;color:#fff" placeholder="https://example.com" />' +
+            '<label style="display:block;margin:6px 0;font-size:12px">账号</label><input id="fa-username" style="width:100%;padding:8px;border-radius:8px;border:1px solid #3b4754;background:#1c2127;color:#fff" placeholder="user@example.com" />' +
+            '<label style="display:block;margin:6px 0;font-size:12px">密码</label><input id="fa-password" type="password" style="width:100%;padding:8px;border-radius:8px;border:1px solid #3b4754;background:#1c2127;color:#fff" />' +
+            '<label style="display:block;margin:6px 0;font-size:12px">所属人</label><input id="fa-owner" style="width:100%;padding:8px;border-radius:8px;border:1px solid #3b4754;background:#1c2127;color:#fff" placeholder="可选，如：张三" />' +
+            '<label style="display:block;margin:6px 0;font-size:12px">标签（空格或逗号分隔）</label><input id="fa-tags" style="width:100%;padding:8px;border-radius:8px;border:1px solid #3b4754;background:#1c2127;color:#fff" placeholder="work personal" />' +
+            '<label style="display:block;margin:6px 0;font-size:12px">备注</label><textarea id="fa-note" style="width:100%;padding:8px;border-radius:8px;border:1px solid #3b4754;background:#1c2127;color:#fff" rows="2"></textarea>' +
+            '<button id="fa-save" style="margin-top:10px;padding:8px 10px;border-radius:8px;background:#137fec;color:#fff">保存</button>' +
+            '<div id="fa-msg" style="margin-top:8px;color:#ffb4b4;font-size:12px"></div>' +
+            '</div>' +
+            '<div id="f-list" style="margin-top:10px"></div>' +
+            '</div>' +
+            '</div>' +
+            '</div>';
+          var showMsg = function (t) {
+            var m = document.getElementById('f-msg');
+            m.textContent = t || '';
+          };
+          var showApp = function () {
+            document.getElementById('f-app').style.display = 'block';
+          };
+          document.getElementById('f-login').onclick = async function () {
+            try {
+              var u = document.getElementById('f-user').value.trim();
+              var p = document.getElementById('f-pass').value;
+              var reg = document.getElementById('f-reg').checked;
+              if (!u || !p) return showMsg('请输入账号与密码');
+              if (reg) await fetchJSON('/api/register', 'POST', { username: u, password: p });
+              var data = await fetchJSON('/api/login', 'POST', { username: u, password: p });
+              window.AUTH_TOKEN = data.token;
+              window.USERNAME = data.username;
+              window.MASTER_KEY = p;
+              showMsg('登录成功');
+              showApp();
+            } catch (e) {
+              showMsg(e.message);
+            }
+          };
+          document.getElementById('f-load').onclick = async function () {
+            try {
+              var data = await fetchJSON('/api/entries', 'GET', null, window.AUTH_TOKEN);
+              var list = document.getElementById('f-list');
+              if (!data.entries || !data.entries.length) {
+                list.innerHTML = '<div style="color:#9dabb9;font-size:12px">暂无数据</div>';
+                return;
+              }
+              list.innerHTML = data.entries
+                .map(function (e) {
+                  return (
+                    '<div style="padding:8px;border:1px solid #2a3441;border-radius:8px;margin-bottom:8px">' +
+                    '<div style="font-weight:700">' +
+                    e.url +
+                    '</div>' +
+                    '<div style="font-size:12px;color:#9dabb9">账号：' +
+                    e.username +
+                    ' ｜ 所属人：' +
+                    (e.owner || '') +
+                    '</div>' +
+                    '<div style="font-size:12px;color:#9dabb9">更新：' +
+                    new Date(e.updatedAt).toLocaleString() +
+                    '</div>' +
+                    '</div>'
+                  );
+                })
+                .join('');
+            } catch (e) {
+              showMsg(e.message);
+            }
+          };
+          document.getElementById('f-to-add').onclick = function () {
+            document.getElementById('f-add').style.display = 'block';
+          };
+          document.getElementById('fa-save').onclick = async function () {
+            try {
+              var url = document.getElementById('fa-url').value.trim();
+              var username = document.getElementById('fa-username').value.trim();
+              var password = document.getElementById('fa-password').value;
+              var owner = document.getElementById('fa-owner').value.trim();
+              var tags = document.getElementById('fa-tags').value.trim();
+              var note = document.getElementById('fa-note').value.trim();
+              if (!url || !username || !password) {
+                document.getElementById('fa-msg').textContent = '请填写必填项';
+                return;
+              }
+              if (!window.MASTER_KEY) {
+                document.getElementById('fa-msg').textContent = '请先登录以设置主密钥';
+                return;
+              }
+              var cipher = encrypt(password, window.MASTER_KEY);
+              var faviconUrl = '';
+              try {
+                var host = new URL(url).hostname;
+                faviconUrl = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=64';
+              } catch (e) {}
+              await fetchJSON(
+                '/api/entries',
+                'POST',
+                {
+                  url: url,
+                  username: username,
+                  owner: owner || undefined,
+                  tags: tags ? tags.split(/[\\s,]+/).filter(Boolean) : [],
+                  note: note || undefined,
+                  passwordEncrypted: cipher,
+                  faviconUrl: faviconUrl,
+                },
+                window.AUTH_TOKEN
+              );
+              document.getElementById('fa-msg').style.color = '#8cf2ab';
+              document.getElementById('fa-msg').textContent = '保存成功';
+            } catch (e) {
+              document.getElementById('fa-msg').style.color = '#ffb4b4';
+              document.getElementById('fa-msg').textContent = e.message;
+            }
+          };
+        }
+        if (!libsReady()) {
+          renderFallback();
+        }
+      })();
+    </script>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createRoot } = ReactDOM;
+        const { MemoryRouter, Routes, Route, Link, useNavigate, useLocation } = ReactRouterDOM;
+        
+        // 初始化认证信息，优先从localStorage恢复
+        window.AUTH_TOKEN = localStorage.getItem('auth_token') || null;
+        window.MASTER_KEY = localStorage.getItem('master_key') || '';
+        window.USERNAME = localStorage.getItem('username') || '';
+
+        // --- COMPONENTS ---
+
+        // 1. Login Screen
+        const LoginScreen = () => {
+            const navigate = useNavigate();
+            const [showPassword, setShowPassword] = useState(false);
+            const [username, setUsername] = useState("");
+            const [password, setPassword] = useState("");
+            const [isRegister, setIsRegister] = useState(false);
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                (async () => {
+                    if (!username || !password) { alert('请输入账号与密码'); return; }
+                    if (isRegister) {
+                        const res = await fetch('/api/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username, password }) });
+                        if (!res.ok) { const x = await res.json().catch(()=>({})); throw new Error(x.error || '注册失败'); }
+                    }
+                    const res2 = await fetch('/api/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username, password }) });
+                    const data = await res2.json();
+                    if (!res2.ok) throw new Error(data.error || '登录失败');
+                    window.AUTH_TOKEN = data.token;
+                    window.USERNAME = data.username;
+                    window.MASTER_KEY = password;
+                    
+                    // 保存认证信息到localStorage以实现持久化登录
+                    localStorage.setItem('auth_token', data.token);
+                    localStorage.setItem('username', data.username);
+                    localStorage.setItem('master_key', password);
+                    
+                    navigate('/dashboard');
+                })().catch((err)=>alert(err.message));
+            };
+
+            return (
+                <div className="flex flex-col items-center justify-center min-h-screen p-4 transition-colors duration-200">
+                    <div className="fixed inset-0 pointer-events-none z-0">
+                        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop')] bg-cover bg-center opacity-10 dark:opacity-20 mix-blend-overlay"></div>
+                        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-50"></div>
+                    </div>
+                    <div className="relative z-10 w-full max-w-[440px] flex flex-col bg-white dark:bg-[#111418] rounded-xl shadow-2xl border border-[#e5e7eb] dark:border-[#283039] overflow-hidden">
+                        <div className="flex flex-col items-center pt-10 px-8 pb-2">
+                            <div className="flex items-center gap-3 text-[#111418] dark:text-white mb-6">
+                                <div className="size-8 text-primary">
+                                    <svg className="w-full h-full" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                                        <path clipRule="evenodd" d="M24 18.4228L42 11.475V34.3663C42 34.7796 41.7457 35.1504 41.3601 35.2992L24 42V18.4228Z" fill="currentColor" fillRule="evenodd"></path>
+                                        <path clipRule="evenodd" d="M24 8.18819L33.4123 11.574L24 15.2071L14.5877 11.574L24 8.18819ZM9 15.8487L21 20.4805V37.6263L9 32.9945V15.8487ZM27 37.6263V20.4805L39 15.8487V32.9945L27 37.6263ZM25.354 2.29885C24.4788 1.98402 23.5212 1.98402 22.646 2.29885L4.98454 8.65208C3.7939 9.08038 3 10.2097 3 11.475V34.3663C3 36.0196 4.01719 37.5026 5.55962 38.098L22.9197 44.7987C23.6149 45.0671 24.3851 45.0671 25.0803 44.7987L42.4404 38.098C43.9828 37.5026 45 36.0196 45 34.3663V11.475C45 10.2097 44.2061 9.08038 43.0155 8.65208L25.354 2.29885Z" fill="currentColor" fillRule="evenodd"></path>
+                                    </svg>
+                                </div>
+                                <h1 className="text-2xl font-bold leading-tight tracking-[-0.015em]">SecureVault 团队密码库</h1>
+                            </div>
+                            <h2 className="text-[#111418] dark:text-white text-xl font-bold leading-tight tracking-[-0.015em] text-center">解锁你的密码库</h2>
+                            <p className="text-[#637588] dark:text-[#9dabb9] text-sm font-normal leading-normal pt-3 text-center">输入账号与密码以安全访问团队凭据。</p>
+                        </div>
+                        <form onSubmit={handleLogin} className="px-8 pb-10 pt-4 flex flex-col gap-6">
+                            <label className="flex flex-col flex-1 group">
+                                <div className="flex justify-between items-baseline">
+                                    <p className="text-[#111418] dark:text-white text-sm font-medium leading-normal pb-2">账号</p>
+                                </div>
+                                <div className="flex w-full items-stretch rounded-lg shadow-sm focus-within:ring-2 focus-within:ring-primary focus-within:ring-opacity-50 transition-shadow">
+                                    <input 
+                                        className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-[#111418] dark:text-white border border-[#d1d5db] dark:border-[#3b4754] bg-white dark:bg-[#1c2127] h-12 placeholder:text-[#9ca3af] dark:placeholder:text-[#9dabb9] px-4 text-base font-normal leading-normal focus:outline-none focus:ring-0" 
+                                        placeholder="输入账号" 
+                                        type="text" 
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                    />
+                                </div>
+                            </label>
+                            <label className="flex flex-col flex-1 group">
+                                <div className="flex justify-between items-baseline">
+                                    <p className="text-[#111418] dark:text-white text-sm font-medium leading-normal pb-2">密码</p>
+                                </div>
+                                <div className="flex w-full flex-1 items-stretch rounded-lg shadow-sm focus-within:ring-2 focus-within:ring-primary focus-within:ring-opacity-50 transition-shadow">
+                                    <input 
+                                        className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-l-lg text-[#111418] dark:text-white border border-[#d1d5db] dark:border-[#3b4754] bg-white dark:bg-[#1c2127] h-12 placeholder:text-[#9ca3af] dark:placeholder:text-[#9dabb9] px-4 text-base font-normal leading-normal border-r-0 focus:outline-none focus:ring-0 focus:border-[#d1d5db] dark:focus:border-[#3b4754]" 
+                                        placeholder="输入密码" 
+                                        type={showPassword ? "text" : "password"} 
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                    />
+                                    <div 
+                                        className="text-[#637588] dark:text-[#9dabb9] flex border border-[#d1d5db] dark:border-[#3b4754] bg-white dark:bg-[#1c2127] items-center justify-center px-4 rounded-r-lg border-l-0 cursor-pointer hover:text-primary transition-colors"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">{showPassword ? 'visibility_off' : 'visibility'}</span>
+                                    </div>
+                                </div>
+                            </label>
+                            <button type="submit" className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 bg-primary hover:bg-[#1170d2] text-white text-base font-bold leading-normal tracking-[0.015em] transition-colors shadow-lg shadow-primary/20">
+                                <span className="truncate">{isRegister ? '注册' : '登录'}</span>
+                            </button>
+                            <div className="flex items-center justify-between mt-2">
+                                <button className="text-sm text-primary hover:text-[#1170d2] transition-colors font-bold flex items-center gap-1" type="button" onClick={() => setIsRegister(!isRegister)}>
+                                    <span className="material-symbols-outlined text-[16px]">key</span>
+                                    {isRegister ? '使用已有账号' : '注册新账号'}
+                                </button>
+                            </div>
+                        </form>
+                        <div className="bg-[#f3f4f6] dark:bg-[#161b22] py-3 px-8 border-t border-[#e5e7eb] dark:border-[#283039] flex items-center justify-center gap-2">
+                            <span className="material-symbols-outlined text-[#637588] dark:text-[#586472] text-[14px]">lock</span>
+                            <span className="text-xs text-[#637588] dark:text-[#586472] font-medium">端到端加密</span>
+                        </div>
+                    </div>
+                    <div className="mt-8 text-center relative z-10">
+                        <p className="text-xs text-[#637588] dark:text-[#586472]">© 2024 SecureVault Inc. v2.4.0</p>
+                    </div>
+                </div>
+            );
+        };
+
+
+        
+        // 3. Entry Detail Screen
+        const EntryDetailScreen = () => {
+            const navigate = useNavigate();
+            const location = useLocation();
+            const entryId = location.pathname.split('/').pop();
+            const [entry, setEntry] = useState(null);
+            const [decryptedPassword, setDecryptedPassword] = useState('');
+            
+            // 解密函数
+            const decrypt = (encrypted, key) => {
+                if (!window.CryptoJS) throw new Error('CryptoJS 未加载，无法解密');
+                var bytes = window.CryptoJS.AES.decrypt(encrypted, key);
+                return bytes.toString(window.CryptoJS.enc.Utf8);
+            };
+            
+            // 复制密码功能
+            const handleCopyPassword = async () => {
+                try {
+                    if (!decryptedPassword) {
+                        alert('密码为空');
+                        return;
+                    }
+                    await navigator.clipboard.writeText(decryptedPassword);
+                    alert('密码已复制到剪贴板');
+                } catch (error) {
+                    alert('复制密码失败: ' + error.message);
+                    console.error('复制密码错误:', error);
+                }
+            };
+            
+            // 删除条目功能
+            const handleDeleteEntry = async () => {
+                if (window.confirm('确定要删除这个条目吗？此操作不可恢复。')) {
+                    try {
+                        const res = await fetch(`/api/entries/${entryId}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${window.AUTH_TOKEN}` }
+                        });
+                        if (res.ok) {
+                            alert('条目已成功删除');
+                            navigate('/dashboard'); // 删除后返回仪表盘
+                        } else {
+                            const errorData = await res.json();
+                            alert('删除条目失败: ' + (errorData.error || '未知错误'));
+                        }
+                    } catch (error) {
+                        console.error('删除条目错误:', error);
+                        alert('删除条目失败: ' + error.message);
+                    }
+                }
+            };
+            
+            useEffect(() => {
+                (async () => {
+                    if (!window.AUTH_TOKEN) return;
+                    
+                    // 获取所有条目
+                    const res = await fetch('/api/entries', { headers: { 'Authorization': `Bearer ${window.AUTH_TOKEN}` } });
+                    const data = await res.json();
+                    
+                    if (res.ok) {
+                        const foundEntry = (data.entries || []).find(e => e.id === entryId);
+                        if (foundEntry) {
+                            setEntry(foundEntry);
+                            // 解密密码
+                            try {
+                                const password = decrypt(foundEntry.passwordEncrypted, window.MASTER_KEY);
+                                setDecryptedPassword(password);
+                            } catch (error) {
+                                console.error('解密密码失败:', error);
+                            }
+                        }
+                    }
+                })().catch(()=>{});
+            }, [entryId]);
+            
+            if (!entry) {
+                return (
+                    <div className="flex h-screen w-full bg-background-light dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
+                        {/* Sidebar */}
+                        <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark">
+                            {/* Sidebar content (same as Dashboard) */}
+                            <div className="flex flex-col h-full p-4">
+                                <div className="flex items-center gap-3 px-2 py-4 mb-6">
+                                    <div className="size-10 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-primary/20">
+                                        <span className="material-symbols-outlined text-white text-[20px] font-bold">key</span>
+                                    </div>
+                                    <div>
+                                        <h1 className="text-xl font-black text-white">SecureVault</h1>
+                                        <p className="text-xs text-slate-500">安全密码管理</p>
+                                    </div>
+                                </div>
+                                <nav className="flex-1 flex flex-col gap-2">
+                                    <Link to="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                        <span className="material-symbols-outlined text-[20px]">home</span>
+                                        <span className="text-sm font-medium">密码库</span>
+                                    </Link>
+                                    <Link to="/add" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                        <span className="material-symbols-outlined text-[20px]">add</span>
+                                        <span className="text-sm font-medium">添加密码</span>
+                                    </Link>
+                                    <Link to="/generator" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                        <span className="material-symbols-outlined text-[20px]">password</span>
+                                        <span className="text-sm font-medium">密码生成器</span>
+                                    </Link>
+                                </nav>
+                            </div>
+                        </aside>
+                        <main className="flex-1 flex flex-col min-w-0 bg-background-light dark:bg-background-dark relative">
+                            <header className="h-16 flex items-center justify-between px-6 border-b border-border-dark bg-background-dark z-20 shrink-0">
+                                <div className="flex items-center gap-4 lg:hidden">
+                                    <button className="text-slate-400 hover:text-white">
+                                        <span className="material-symbols-outlined">menu</span>
+                                    </button>
+                                    <span className="text-white font-bold text-lg">SecureVault</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => navigate(-1)} className="p-2 text-slate-400 hover:text-white hover:bg-surface-dark rounded-lg">
+                                        <span className="material-symbols-outlined">arrow_back</span>
+                                    </button>
+                                </div>
+                            </header>
+                            <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+                                <div className="max-w-4xl mx-auto">
+                                    <div className="bg-surface-dark border border-border-dark rounded-xl p-8 shadow-xl shadow-black/20">
+                                        <h2 className="text-2xl font-black text-white mb-6">加载中...</h2>
+                                    </div>
+                                </div>
+                            </div>
+                        </main>
+                    </div>
+                );
+            }
+            
+            return (
+                <div className="flex h-screen w-full bg-background-light dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
+                    {/* Sidebar */}
+                    <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark">
+                        {/* Sidebar content (same as Dashboard) */}
+                        <div className="flex flex-col h-full p-4">
+                            <div className="flex items-center gap-3 px-2 py-4 mb-6">
+                                <div className="size-10 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-primary/20">
+                                    <span className="material-symbols-outlined text-white text-[20px] font-bold">key</span>
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-black text-white">SecureVault</h1>
+                                    <p className="text-xs text-slate-500">安全密码管理</p>
+                                </div>
+                            </div>
+                            <nav className="flex-1 flex flex-col gap-2">
+                                <Link to="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                    <span className="material-symbols-outlined text-[20px]">home</span>
+                                    <span className="text-sm font-medium">密码库</span>
+                                </Link>
+                                <Link to="/add" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                    <span className="material-symbols-outlined text-[20px]">add</span>
+                                    <span className="text-sm font-medium">添加密码</span>
+                                </Link>
+                                <Link to="/generator" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                    <span className="material-symbols-outlined text-[20px]">password</span>
+                                    <span className="text-sm font-medium">密码生成器</span>
+                                </Link>
+                            </nav>
+                        </div>
+                    </aside>
+                    <main className="flex-1 flex flex-col min-w-0 bg-background-light dark:bg-background-dark relative">
+                        <header className="h-16 flex items-center justify-between px-6 border-b border-border-dark bg-background-dark z-20 shrink-0">
+                            <div className="flex items-center gap-4 lg:hidden">
+                                <button className="text-slate-400 hover:text-white">
+                                    <span className="material-symbols-outlined">menu</span>
+                                </button>
+                                <span className="text-white font-bold text-lg">SecureVault</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => navigate(-1)} className="p-2 text-slate-400 hover:text-white hover:bg-surface-dark rounded-lg">
+                                    <span className="material-symbols-outlined">arrow_back</span>
+                                </button>
+                                <button onClick={() => navigate(`/entry/${entryId}/edit`)} className="bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-bold py-2 px-4 rounded-lg shadow-lg shadow-yellow-500/20 flex items-center gap-2 transition-all">
+                                    <span className="material-symbols-outlined text-[20px]">edit</span>
+                                    <span>编辑</span>
+                                </button>
+                                <button onClick={handleDeleteEntry} className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2 px-4 rounded-lg shadow-lg shadow-red-500/20 flex items-center gap-2 transition-all">
+                                    <span className="material-symbols-outlined text-[20px]">delete</span>
+                                    <span>删除</span>
+                                </button>
+                            </div>
+                        </header>
+                        <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+                            <div className="max-w-4xl mx-auto">
+                                <div className="bg-surface-dark border border-border-dark rounded-xl p-8 shadow-xl shadow-black/20">
+                                    <div className="flex items-center gap-4 mb-6">
+                                        <div className="size-16 rounded-lg bg-white p-3 flex items-center justify-center">
+                                            <img alt="icon" className="size-full object-contain" src={entry.faviconUrl || 'https://www.google.com/s2/favicons?domain=example.com&sz=64'}/>
+                                        </div>
+                                        <div>
+                                            <h2 className="text-2xl font-black text-white">{entry.url}</h2>
+                                            <p className="text-slate-400">{entry.username}</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-400 mb-2">账号</label>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex-1 bg-background-dark border border-border-dark rounded-lg p-3">
+                                                    <p className="font-mono text-white">{entry.username}</p>
+                                                </div>
+                                                <button onClick={async () => {
+                                                    try {
+                                                        if (!entry.username) {
+                                                            alert('账号为空');
+                                                            return;
+                                                        }
+                                                        await navigator.clipboard.writeText(entry.username);
+                                                        alert('账号已复制到剪贴板');
+                                                    } catch (error) {
+                                                        alert('复制账号失败: ' + error.message);
+                                                        console.error('复制账号错误:', error);
+                                                    }
+                                                }} className="p-3 bg-primary hover:bg-blue-600 text-white rounded-lg transition-colors">
+                                                    <span className="material-symbols-outlined">content_copy</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-400 mb-2">密码</label>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex-1 bg-background-dark border border-border-dark rounded-lg p-3">
+                                                    <p className="font-mono text-white">{decryptedPassword}</p>
+                                                </div>
+                                                <button onClick={handleCopyPassword} className="p-3 bg-success hover:bg-green-600 text-white rounded-lg transition-colors">
+                                                    <span className="material-symbols-outlined">content_copy</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-400 mb-2">网址</label>
+                                            <div className="bg-background-dark border border-border-dark rounded-lg p-3">
+                                                <a href={entry.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 truncate">{entry.url}</a>
+                                            </div>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-400 mb-2">所属人</label>
+                                            <div className="bg-background-dark border border-border-dark rounded-lg p-3">
+                                                <p className="text-white">{entry.owner}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {entry.tags && entry.tags.length > 0 && (
+                                        <div className="mb-6">
+                                            <label className="block text-sm font-medium text-slate-400 mb-2">标签</label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {entry.tags.map((tag, index) => (
+                                                    <span key={index} className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    {entry.note && (
+                                        <div className="mb-6">
+                                            <label className="block text-sm font-medium text-slate-400 mb-2">备注</label>
+                                            <div className="bg-background-dark border border-border-dark rounded-lg p-3">
+                                                <p className="text-white whitespace-pre-line">{entry.note}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-400 mb-2">创建时间</label>
+                                            <div className="bg-background-dark border border-border-dark rounded-lg p-3">
+                                                <p className="text-slate-400">{new Date(entry.createdAt).toLocaleString()}</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-400 mb-2">更新时间</label>
+                                            <div className="bg-background-dark border border-border-dark rounded-lg p-3">
+                                                <p className="text-slate-400">{new Date(entry.updatedAt).toLocaleString()}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+        
+        // 4. Entry Edit Screen
+        const EntryEditScreen = () => {
+            const navigate = useNavigate();
+            const location = useLocation();
+            const pathParts = location.pathname.split('/');
+            const entryId = pathParts[pathParts.length - 2]; // 获取/edit前的ID
+            const [entry, setEntry] = useState(null);
+            const [formData, setFormData] = useState({
+                url: '',
+                username: '',
+                password: '',
+                owner: '',
+                category: '',
+                tags: '',
+                note: ''
+            });
+            const [error, setError] = useState('');
+            const [isSaving, setIsSaving] = useState(false);
+            const { categories } = useCategories();
+            
+            // 加密函数
+            const encrypt = (plain, key) => {
+                if (!window.CryptoJS) throw new Error('CryptoJS 未加载，无法加密');
+                return window.CryptoJS.AES.encrypt(plain, key).toString();
+            };
+            
+            // 解密函数
+            const decrypt = (encrypted, key) => {
+                if (!window.CryptoJS) throw new Error('CryptoJS 未加载，无法解密');
+                var bytes = window.CryptoJS.AES.decrypt(encrypted, key);
+                return bytes.toString(window.CryptoJS.enc.Utf8);
+            };
+            
+            useEffect(() => {
+                (async () => {
+                    if (!window.AUTH_TOKEN) return;
+                    
+                    // 获取所有条目
+                    const res = await fetch('/api/entries', { headers: { 'Authorization': `Bearer ${window.AUTH_TOKEN}` } });
+                    const data = await res.json();
+                    
+                    if (res.ok) {
+                        const foundEntry = (data.entries || []).find(e => e.id === entryId);
+                        if (foundEntry) {
+                            setEntry(foundEntry);
+                            // 解密密码
+                            try {
+                                const password = decrypt(foundEntry.passwordEncrypted, window.MASTER_KEY);
+                                setFormData({
+                                    url: foundEntry.url,
+                                    username: foundEntry.username,
+                                    password: password,
+                                    owner: foundEntry.owner || '',
+                                    category: foundEntry.category || '',
+                                    tags: foundEntry.tags ? foundEntry.tags.join(', ') : '',
+                                    note: foundEntry.note || ''
+                                });
+                            } catch (error) {
+                                console.error('解密密码失败:', error);
+                            }
+                        }
+                    }
+                })().catch(()=>{});
+            }, [entryId]);
+            
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+            
+            const handleSave = async (e) => {
+                e.preventDefault();
+                
+                const { url, username, password, owner, category, tags, note } = formData;
+                
+                if (!url || !username || !password) {
+                    setError('请填写必填项');
+                    return;
+                }
+                
+                if (!window.MASTER_KEY) {
+                    setError('请先登录以设置主密钥');
+                    return;
+                }
+                
+                setIsSaving(true);
+                setError('');
+                
+                try {
+                    const cipher = encrypt(password, window.MASTER_KEY);
+                    let faviconUrl = '';
+                    
+                    try {
+                        const host = new URL(url).hostname;
+                        faviconUrl = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=64';
+                    } catch (e) {}
+                    
+                    const res = await fetch(`/api/entries/${entryId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${window.AUTH_TOKEN}`
+                        },
+                        body: JSON.stringify({
+                            url: url,
+                            username: username,
+                            owner: owner || undefined,
+                            category: category || undefined,
+                            tags: tags ? tags.split(/[\s,]+/).filter(Boolean) : [],
+                            note: note || undefined,
+                            passwordEncrypted: cipher,
+                            faviconUrl: faviconUrl,
+                            updatedAt: new Date().toISOString()
+                        })
+                    });
+                    
+                    if (res.ok) {
+                        navigate(`/entry/${entryId}`);
+                    } else {
+                        const data = await res.json();
+                        setError(data.error || '保存失败');
+                    }
+                } catch (error) {
+                    setError('保存失败: ' + error.message);
+                } finally {
+                    setIsSaving(false);
+                }
+            };
+
+            // 删除条目功能
+            const handleDeleteEntry = async () => {
+                if (!confirm('确定要删除这个密码条目吗？此操作不可恢复。')) {
+                    return;
+                }
+                
+                try {
+                    const res = await fetch(`/api/entries/${entryId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${window.AUTH_TOKEN}`
+                        }
+                    });
+                    
+                    if (res.ok) {
+                        navigate('/dashboard');
+                    } else {
+                        const data = await res.json();
+                        setError(data.error || '删除失败');
+                    }
+                } catch (error) {
+                    setError('删除过程中发生错误');
+                }
+            };
+
+            if (!entry) {
+                return (
+                    <div className="flex h-screen w-full bg-background-light dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
+                        {/* Sidebar */}
+                        <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark">
+                            {/* Sidebar content (same as Dashboard) */}
+                            <div className="flex flex-col h-full p-4">
+                                <div className="flex items-center gap-3 px-2 py-4 mb-6">
+                                    <div className="size-10 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-primary/20">
+                                        <span className="material-symbols-outlined text-white text-[20px] font-bold">key</span>
+                                    </div>
+                                    <div>
+                                        <h1 className="text-xl font-black text-white">SecureVault</h1>
+                                        <p className="text-xs text-slate-500">安全密码管理</p>
+                                    </div>
+                                </div>
+                                <nav className="flex-1 flex flex-col gap-2">
+                                    <Link to="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                        <span className="material-symbols-outlined text-[20px]">home</span>
+                                        <span className="text-sm font-medium">密码库</span>
+                                    </Link>
+                                    <Link to="/add" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                        <span className="material-symbols-outlined text-[20px]">add</span>
+                                        <span className="text-sm font-medium">添加密码</span>
+                                    </Link>
+                                    <Link to="/generator" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                        <span className="material-symbols-outlined text-[20px]">password</span>
+                                        <span className="text-sm font-medium">密码生成器</span>
+                                    </Link>
+                                </nav>
+                            </div>
+                        </aside>
+                        <main className="flex-1 flex flex-col min-w-0 bg-background-light dark:bg-background-dark relative">
+                            <header className="h-16 flex items-center justify-between px-6 border-b border-border-dark bg-background-dark z-20 shrink-0">
+                                <div className="flex items-center gap-4 lg:hidden">
+                                    <button className="text-slate-400 hover:text-white">
+                                        <span className="material-symbols-outlined">menu</span>
+                                    </button>
+                                    <span className="text-white font-bold text-lg">SecureVault</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => navigate(-1)} className="p-2 text-slate-400 hover:text-white hover:bg-surface-dark rounded-lg">
+                                        <span className="material-symbols-outlined">arrow_back</span>
+                                    </button>
+                                </div>
+                            </header>
+                            <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+                                <div className="max-w-4xl mx-auto">
+                                    <div className="bg-surface-dark border border-border-dark rounded-xl p-8 shadow-xl shadow-black/20">
+                                        <h2 className="text-2xl font-black text-white mb-6">加载中...</h2>
+                                    </div>
+                                </div>
+                            </div>
+                        </main>
+                    </div>
+                );
+            }
+            
+            return (
+                <div className="flex h-screen w-full bg-background-light dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
+                    {/* Sidebar */}
+                    <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark">
+                        {/* Sidebar content (same as Dashboard) */}
+                        <div className="flex flex-col h-full p-4">
+                            <div className="flex items-center gap-3 px-2 py-4 mb-6">
+                                <div className="size-10 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-primary/20">
+                                    <span className="material-symbols-outlined text-white text-[20px] font-bold">key</span>
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-black text-white">SecureVault</h1>
+                                    <p className="text-xs text-slate-500">安全密码管理</p>
+                                </div>
+                            </div>
+                            <nav className="flex-1 flex flex-col gap-2">
+                                <Link to="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                    <span className="material-symbols-outlined text-[20px]">home</span>
+                                    <span className="text-sm font-medium">密码库</span>
+                                </Link>
+                                <Link to="/add" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                    <span className="material-symbols-outlined text-[20px]">add</span>
+                                    <span className="text-sm font-medium">添加密码</span>
+                                </Link>
+                                <Link to="/generator" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                    <span className="material-symbols-outlined text-[20px]">password</span>
+                                    <span className="text-sm font-medium">密码生成器</span>
+                                </Link>
+                            </nav>
+                        </div>
+                    </aside>
+                    <main className="flex-1 flex flex-col min-w-0 bg-background-light dark:bg-background-dark relative">
+                        <header className="h-16 flex items-center justify-between px-6 border-b border-border-dark bg-background-dark z-20 shrink-0">
+                            <div className="flex items-center gap-4 lg:hidden">
+                                <button className="text-slate-400 hover:text-white">
+                                    <span className="material-symbols-outlined">menu</span>
+                                </button>
+                                <span className="text-white font-bold text-lg">SecureVault</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => navigate(-1)} className="p-2 text-slate-400 hover:text-white hover:bg-surface-dark rounded-lg">
+                                    <span className="material-symbols-outlined">arrow_back</span>
+                                </button>
+                            </div>
+                        </header>
+                        <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+                            <div className="max-w-4xl mx-auto">
+                                <div className="bg-surface-dark border border-border-dark rounded-xl p-8 shadow-xl shadow-black/20">
+                                    <h2 className="text-2xl font-black text-white mb-6">编辑密码条目</h2>
+                                    
+                                    {error && (
+                                        <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg p-4 mb-6">
+                                            {error}
+                                        </div>
+                                    )}
+                                    
+                                    <form onSubmit={handleSave}>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                            <div>
+                                                <label htmlFor="url" className="block text-sm font-medium text-slate-400 mb-2">网址 <span className="text-red-400">*</span></label>
+                                                <input
+                                                    type="text"
+                                                    id="url"
+                                                    name="url"
+                                                    value={formData.url}
+                                                    onChange={handleChange}
+                                                    className="w-full bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:outline-none focus:ring-1 focus:ring-primary"
+                                                    placeholder="https://www.example.com"
+                                                />
+                                            </div>
+                                            
+                                            <div>
+                                                <label htmlFor="username" className="block text-sm font-medium text-slate-400 mb-2">账号 <span className="text-red-400">*</span></label>
+                                                <input
+                                                    type="text"
+                                                    id="username"
+                                                    name="username"
+                                                    value={formData.username}
+                                                    onChange={handleChange}
+                                                    className="w-full bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:outline-none focus:ring-1 focus:ring-primary"
+                                                    placeholder="用户名/邮箱"
+                                                />
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                                            <div>
+                                                <label htmlFor="password" className="block text-sm font-medium text-slate-400 mb-2">密码 <span className="text-red-400">*</span></label>
+                                                <input
+                                                    type="password"
+                                                    id="password"
+                                                    name="password"
+                                                    value={formData.password}
+                                                    onChange={handleChange}
+                                                    className="w-full bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:outline-none focus:ring-1 focus:ring-primary"
+                                                    placeholder="请输入密码"
+                                                />
+                                            </div>
+                                            
+                                            <div>
+                                                <label htmlFor="owner" className="block text-sm font-medium text-slate-400 mb-2">所属人</label>
+                                                <input
+                                                    type="text"
+                                                    id="owner"
+                                                    name="owner"
+                                                    value={formData.owner}
+                                                    onChange={handleChange}
+                                                    className="w-full bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:outline-none focus:ring-1 focus:ring-primary"
+                                                    placeholder="所属人名称"
+                                                />
+                                            </div>
+                                            
+                                            <div>
+                                                <label htmlFor="category" className="block text-sm font-medium text-slate-400 mb-2">分类</label>
+                                                <select
+                                                    id="category"
+                                                    name="category"
+                                                    value={formData.category}
+                                                    onChange={handleChange}
+                                                    className="w-full bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:outline-none focus:ring-1 focus:ring-primary"
+                                                >
+                                                    <option value="">请选择分类</option>
+                                                    {categories.map((cat) => (
+                                                        <option key={cat} value={cat}>{cat}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="mb-6">
+                                            <label htmlFor="tags" className="block text-sm font-medium text-slate-400 mb-2">标签</label>
+                                            <input
+                                                type="text"
+                                                id="tags"
+                                                name="tags"
+                                                value={formData.tags}
+                                                onChange={handleChange}
+                                                className="w-full bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:outline-none focus:ring-1 focus:ring-primary"
+                                                placeholder="用逗号或空格分隔多个标签"
+                                            />
+                                        </div>
+                                        
+                                        <div className="mb-6">
+                                            <label htmlFor="note" className="block text-sm font-medium text-slate-400 mb-2">备注</label>
+                                            <textarea
+                                                id="note"
+                                                name="note"
+                                                value={formData.note}
+                                                onChange={handleChange}
+                                                rows={4}
+                                                className="w-full bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:outline-none focus:ring-1 focus:ring-primary"
+                                                placeholder="添加备注信息"
+                                            ></textarea>
+                                        </div>
+                                        
+                                        <div className="flex justify-end gap-3">
+                                            <button type="button" onClick={() => navigate(-1)} className="py-2 px-6 bg-background-dark border border-border-dark rounded-lg text-white hover:bg-surface-dark transition-colors">
+                                                取消
+                                            </button>
+                                            <button type="submit" disabled={isSaving} className="py-2 px-6 bg-primary hover:bg-blue-600 text-white rounded-lg shadow-lg shadow-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                                {isSaving ? '保存中...' : '保存'}
+                                            </button>
+                                            <button type="button" onClick={handleDeleteEntry} disabled={isSaving} className="py-2 px-6 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-lg shadow-red-200/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                                删除
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+        
+        // 5. Dashboard Screen (Password List)
+        const DashboardScreen = () => {
+            const navigate = useNavigate();
+            const [entries, setEntries] = useState([]);
+            
+            // 解密函数
+            const decrypt = (encrypted, key) => {
+                if (!window.CryptoJS) throw new Error('CryptoJS 未加载，无法解密');
+                var bytes = window.CryptoJS.AES.decrypt(encrypted, key);
+                return bytes.toString(window.CryptoJS.enc.Utf8);
+            };
+
+            useEffect(() => {
+                (async () => {
+                    if (!window.AUTH_TOKEN) return;
+                    const res = await fetch('/api/entries', { headers: { 'Authorization': `Bearer ${window.AUTH_TOKEN}` } });
+                    const data = await res.json();
+                    if (res.ok) setEntries(data.entries || []);
+                })().catch(()=>{});
+            }, []);
+            
+            // 复制密码功能
+            const handleCopyPassword = async (entry) => {
+                try {
+                    if (!window.MASTER_KEY) {
+                        alert('请先登录');
+                        return;
+                    }
+                    if (!entry.passwordEncrypted) {
+                        alert('密码为空');
+                        return;
+                    }
+                    const decryptedPassword = decrypt(entry.passwordEncrypted, window.MASTER_KEY);
+                    await navigator.clipboard.writeText(decryptedPassword);
+                    alert('密码已复制到剪贴板');
+                } catch (error) {
+                    alert('复制密码失败: ' + error.message);
+                    console.error('复制密码错误:', error);
+                }
+            };
+            
+            // 查看详情功能
+            const handleViewDetail = (entryId) => {
+                navigate(`/entry/${entryId}`);
+            };
+            
+            // 编辑条目功能
+            const handleEditEntry = (entryId) => {
+                navigate(`/entry/${entryId}/edit`);
+            };
+            
+            // 删除条目功能
+            const handleDeleteEntry = async (entryId) => {
+                if (window.confirm('确定要删除这个条目吗？此操作不可恢复。')) {
+                    try {
+                        const res = await fetch(`/api/entries/${entryId}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${window.AUTH_TOKEN}` }
+                        });
+                        if (res.ok) {
+                            // 从本地状态中移除删除的条目
+                            setEntries(prevEntries => prevEntries.filter(entry => entry.id !== entryId));
+                            alert('条目已成功删除');
+                        } else {
+                            const errorData = await res.json();
+                            alert('删除条目失败: ' + (errorData.error || '未知错误'));
+                        }
+                    } catch (error) {
+                        console.error('删除条目错误:', error);
+                        alert('删除条目失败: ' + error.message);
+                    }
+                }
+            };
+
+            return (
+                <div className="flex h-screen w-full bg-background-light dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
+                    {/* Sidebar */}
+                    <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark">
+                        <div className="flex flex-col h-full p-4">
+                            <div className="flex items-center gap-3 px-2 py-4 mb-6">
+                                <div className="size-10 rounded-xl bg-gradient-to-br from-primary to-blue-700 flex items-center justify-center text-white shadow-lg shadow-primary/20">
+                                    <span className="material-symbols-outlined">lock_open</span>
+                                </div>
+                                <div className="flex flex-col">
+                                    <h1 className="text-white text-lg font-bold leading-tight">SecureVault</h1>
+                                    <p className="text-slate-400 text-xs font-medium">企业版</p>
+                                </div>
+                            </div>
+                            <nav className="flex flex-col gap-1.5 flex-1">
+                                <Link to="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary group">
+                                    <span className="material-symbols-outlined icon-filled">shield_lock</span>
+                                    <span className="text-sm font-semibold">全部条目</span>
+                                </Link>
+                                <a href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-white transition-colors group">
+                                    <span className="material-symbols-outlined">star</span>
+                                    <span className="text-sm font-medium">收藏</span>
+                                </a>
+                                <Link to="/generator" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-white transition-colors group">
+                                    <span className="material-symbols-outlined">vpn_key</span>
+                                    <span className="text-sm font-medium">生成器</span>
+                                </Link>
+                                <Link to="/categories" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-white transition-colors group">
+                                    <span className="material-symbols-outlined">category</span>
+                                    <span className="text-sm font-medium">分类管理</span>
+                                </Link>
+                                <div className="h-px bg-border-dark my-2 mx-3"></div>
+                                <a href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-white transition-colors group">
+                                    <span className="material-symbols-outlined">health_and_safety</span>
+                                    <span className="text-sm font-medium">密码库健康</span>
+                                    <span className="ml-auto bg-red-500/10 text-red-400 text-xs font-bold px-2 py-0.5 rounded-full">3 条弱密码</span>
+                                </a>
+                                <a href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-white transition-colors group">
+                                    <span className="material-symbols-outlined">delete</span>
+                                    <span className="text-sm font-medium">回收站</span>
+                                </a>
+                            </nav>
+                            <div className="mt-auto">
+                                <button className="flex w-full items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-white transition-colors">
+                                    <span className="material-symbols-outlined">settings</span>
+                                    <span className="text-sm font-medium">设置</span>
+                                </button>
+                                <div className="flex items-center gap-3 px-3 py-4 mt-2 border-t border-border-dark cursor-pointer" onClick={() => navigate('/')}>
+                                    <div className="size-9 rounded-full bg-cover bg-center" style={{backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuAQESKyOVxorzyAg6JaN3VU86IeuZkC-5NY_NrGWKrRXH4XSlnDiTO6qUunHXVUumKcilqQQSqeudNn0DhmWlFUxRNdYCOXqN0nzMR73S5vZ8QSak0P284SwR27uHDpw92OSwLbd5UNWQmui-1zn7Za1N3wHv6EEORvZe99X7A64dNM4T-vKux7FVVcJA4rGnJOsByV97YPYS5_7PyFb3lrebMm8KY-tn7Q-XAXDD8QjsxNcc9duoWjboU5yALXSIZ7lZDarLf2OCXP')"}}></div>
+                                    <div className="flex flex-col min-w-0">
+                                        <p className="text-sm font-medium text-white truncate">Alex Morgan</p>
+                                        <p className="text-xs text-slate-500 truncate">alex.m@company.com</p>
+                                    </div>
+                                </div>
+                                <button className="flex w-full items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-white transition-colors mt-2" onClick={() => {
+                                    // 清除本地存储的认证信息
+                                    localStorage.removeItem('auth_token');
+                                    localStorage.removeItem('username');
+                                    localStorage.removeItem('master_key');
+                                    // 重置全局变量
+                                    window.AUTH_TOKEN = '';
+                                    window.USERNAME = '';
+                                    window.MASTER_KEY = '';
+                                    // 导航到登录页面
+                                    navigate('/');
+                                    // 刷新页面确保状态清除
+                                    window.location.reload();
+                                }}>
+                                    <span className="material-symbols-outlined">logout</span>
+                                    <span className="text-sm font-medium">登出</span>
+                                </button>
+                            </div>
+                        </div>
+                    </aside>
+                    <main className="flex-1 flex flex-col min-w-0 bg-background-light dark:bg-background-dark relative">
+                        <header className="h-16 flex items-center justify-between px-6 border-b border-border-dark bg-background-dark z-20 shrink-0">
+                            <div className="flex items-center gap-4 lg:hidden">
+                                <button className="text-slate-400 hover:text-white">
+                                    <span className="material-symbols-outlined">menu</span>
+                                </button>
+                                <span className="text-white font-bold text-lg">SecureVault</span>
+                            </div>
+                            <div className="hidden md:flex flex-1 max-w-xl mx-4">
+                                <div className="relative w-full group">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 group-focus-within:text-primary">
+                                        <span className="material-symbols-outlined text-[20px]">search</span>
+                                    </div>
+                                    <input className="block w-full pl-10 pr-3 py-2 border-none rounded-lg leading-5 bg-surface-dark text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm h-10 transition-all" placeholder="搜索密码库（如：Github、AWS、财务）..." type="text"/>
+                                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center">
+                                        <kbd className="inline-flex items-center border border-slate-700 rounded px-2 text-xs font-sans font-medium text-slate-500">⌘K</kbd>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button className="p-2 text-slate-400 hover:text-white hover:bg-surface-dark rounded-lg relative">
+                                    <span className="material-symbols-outlined">notifications</span>
+                                    <span className="absolute top-2 right-2 size-2 bg-primary rounded-full border-2 border-background-dark"></span>
+                                </button>
+                                <Link to="/add" className="bg-primary hover:bg-blue-600 text-white text-sm font-bold py-2 px-4 rounded-lg shadow-lg shadow-primary/20 flex items-center gap-2 transition-all">
+                                    <span className="material-symbols-outlined text-[20px]">add</span>
+                                    <span className="hidden sm:inline">添加密码</span>
+                                </Link>
+                            </div>
+                        </header>
+                        <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+                            <div className="max-w-6xl mx-auto flex flex-col gap-6">
+                                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                                    <div>
+                                        <h2 className="text-3xl font-black text-white tracking-tight">全部密码</h2>
+                                        <p className="text-slate-400 mt-1">共有 {entries.length} 个条目，分布于 {new Set(entries.flatMap(e => e.tags || [])).size} 个标签</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-mono text-slate-500 bg-surface-dark px-2 py-1 rounded border border-border-dark">上次同步：刚刚</span>
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <div className="flex items-center gap-2 bg-surface-dark border border-border-dark rounded-lg p-1 pr-2">
+                                        <button className="px-3 py-1.5 bg-primary/20 text-primary text-sm font-medium rounded-md shadow-sm">全部</button>
+                                        <button className="px-3 py-1.5 text-slate-400 hover:text-white text-sm font-medium rounded-md hover:bg白/5 transition-colors">收藏</button>
+                                        <button className="px-3 py-1.5 text-slate-400 hover:text白 text-sm font-medium rounded-md hover:bg白/5 transition-colors">弱密码</button>
+                                    </div>
+                                    <div className="h-8 w-px bg-border-dark mx-1 hidden sm:block"></div>
+                                    <div className="ml-auto flex items-center gap-2">
+                                        <button className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-surface-dark" title="列表视图">
+                                            <span className="material-symbols-outlined icon-filled">view_list</span>
+                                        </button>
+                                        <button className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-surface-dark" title="网格视图">
+                                            <span className="material-symbols-outlined">grid_view</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="w-full bg-surface-dark border border-border-dark rounded-xl overflow-hidden shadow-xl shadow-black/20">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-[#1c232d] border-b border-border-dark text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                                                    <th className="px-6 py-4 w-12 text-center">
+                                                        <input className="rounded border-slate-600 bg-transparent text-primary focus:ring-0 focus:ring-offset-0" type="checkbox"/>
+                                                    </th>
+                                                    <th className="px-6 py-4 min-w-[200px]">名称/网址</th>
+                                                    <th className="px-6 py-4 min-w-[150px]">账号</th>
+                                                    <th className="px-6 py-4">分类</th>
+                                                    <th className="px-6 py-4">标签</th>
+                                                    <th className="px-6 py-4">所属人</th>
+                                                    <th className="px-6 py-4">更新时间</th>
+                                                    <th className="px-6 py-4 text-right">操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-border-dark">
+                                                {entries.map((it) => (
+                                                <tr key={it.id} className="group hover:bg-white/[0.02] transition-colors">
+                                                    <td className="px-6 py-4 text-center">
+                                                        <input className="rounded border-slate-600 bg-transparent text-primary focus:ring-0 focus:ring-offset-0 opacity-0 group-hover:opacity-100 transition-opacity" type="checkbox"/>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="size-10 rounded-lg bg-white p-1.5 flex items-center justify-center">
+                                                                <img alt="icon" className="size-full object-contain" src={it.faviconUrl || 'https://www.google.com/s2/favicons?domain=example.com&sz=64'}/>
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-white font-semibold text-sm">{it.url}</span>
+                                                                <span className="text-slate-500 text-xs">{(function(){try{return new URL(it.url).hostname}catch(e){return it.url}})()}</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="text-slate-300 font-mono text-sm">{it.username}</span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">{it.category || '未分类'}</span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">{(it.tags && it.tags[0]) || 'General'}</span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="text-slate-300 text-sm">{it.owner}</span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="text-xs text-slate-400">{new Date(it.updatedAt).toLocaleString()}</span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={async () => {
+                                                                try {
+                                                                    if (!it.username) {
+                                                                        alert('账号为空');
+                                                                        return;
+                                                                    }
+                                                                    await navigator.clipboard.writeText(it.username);
+                                                                    alert('账号已复制到剪贴板');
+                                                                } catch (error) {
+                                                                    alert('复制账号失败: ' + error.message);
+                                                                    console.error('复制账号错误:', error);
+                                                                }
+                                                            }} className="size-8 flex items-center justify-center rounded-lg bg-border-dark hover:bg-primary hover:text-white text-slate-300 transition-colors" title="复制账号">
+                                                                <span className="material-symbols-outlined text-[18px]">content_copy</span>
+                                                            </button>
+                                                            <button onClick={() => handleCopyPassword(it)} className="size-8 flex items-center justify-center rounded-lg bg-border-dark hover:bg-success hover:text-white text-slate-300 transition-colors" title="复制密码">
+                                                                <span className="material-symbols-outlined text-[18px]">key</span>
+                                                            </button>
+                                                            <button onClick={() => handleViewDetail(it.id)} className="size-8 flex items-center justify-center rounded-lg bg-border-dark hover:bg-blue-500 hover:text-white text-slate-300 transition-colors" title="查看详情">
+                                                                <span className="material-symbols-outlined text-[18px]">visibility</span>
+                                                            </button>
+                                                            <button onClick={() => handleEditEntry(it.id)} className="size-8 flex items-center justify-center rounded-lg bg-border-dark hover:bg-yellow-500 hover:text-white text-slate-300 transition-colors" title="编辑">
+                                                                <span className="material-symbols-outlined text-[18px]">edit</span>
+                                                            </button>
+                                                            <button onClick={() => handleDeleteEntry(it.id)} className="size-8 flex items-center justify-center rounded-lg bg-border-dark hover:bg-danger hover:text-white text-slate-300 transition-colors" title="删除">
+                                                                <span className="material-symbols-outlined text-[18px]">delete</span>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>))}
+                                                {entries.length === 0 && (
+                                                <tr className="group hover:bg-white/[0.02] transition-colors">
+                                                    <td className="px-6 py-4 text-center" colspan="8">
+                                                    <span className="text-slate-500 text-sm">暂无数据</span>
+                                                    </td>
+                                                </tr>)}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="bg-[#1c232d] px-6 py-3 border-t border-border-dark flex items-center justify-between">
+                                        <span className="text-sm text-slate-400">条目数：{entries.length}</span>
+                                        <div className="flex gap-2">
+                                            <button className="px-3 py-1 text-sm rounded bg-surface-dark border border-border-dark text-slate-400 hover:text-white disabled:opacity-50">上一页</button>
+                                            <button className="px-3 py-1 text-sm rounded bg-surface-dark border border-border-dark text-slate-400 hover:text-white">下一页</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        // 3. Add Password Screen
+        const AddPasswordScreen = () => {
+            const navigate = useNavigate();
+            const [url, setUrl] = useState('');
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [note, setNote] = useState('');
+            const [owner, setOwner] = useState('');
+            const [tags, setTags] = useState('');
+            const [category, setCategory] = useState('');
+            const [error, setError] = useState('');
+            const [isSaving, setIsSaving] = useState(false);
+            const { categories } = useCategories();
+
+            // 加密函数
+            const encrypt = (plain, key) => {
+                if (!window.CryptoJS) throw new Error('CryptoJS 未加载，无法加密');
+                return window.CryptoJS.AES.encrypt(plain, key).toString();
+            };
+            
+            // 解密函数
+            const decrypt = (encrypted, key) => {
+                if (!window.CryptoJS) throw new Error('CryptoJS 未加载，无法解密');
+                var bytes = window.CryptoJS.AES.decrypt(encrypted, key);
+                return bytes.toString(window.CryptoJS.enc.Utf8);
+            };
+
+            // 保存密码条目
+            const handleSave = async (e) => {
+                e.preventDefault();
+                setError('');
+                setIsSaving(true);
+
+                try {
+                    // 验证必填字段
+                    if (!url.trim() || !username.trim() || !password) {
+                        throw new Error('请填写必填项');
+                    }
+
+                    if (!window.MASTER_KEY) {
+                        throw new Error('请先登录以设置主密钥');
+                    }
+
+                    // 加密密码
+                    const cipher = encrypt(password, window.MASTER_KEY);
+                    
+                    // 获取favicon URL
+                    let faviconUrl = '';
+                    try {
+                        const host = new URL(url).hostname;
+                        faviconUrl = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=64';
+                    } catch (e) {}
+
+                    // 调用API保存条目
+                    await fetch('/api/entries', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + window.AUTH_TOKEN
+                        },
+                        body: JSON.stringify({
+                            url: url.trim(),
+                            username: username.trim(),
+                            owner: owner.trim() || undefined,
+                            category: category.trim() || undefined,
+                            tags: tags.trim() ? tags.trim().split(/[\s,]+/).filter(Boolean) : [],
+                            note: note.trim() || undefined,
+                            passwordEncrypted: cipher,
+                            faviconUrl: faviconUrl
+                        })
+                    }).then(async (r) => {
+                        const data = await r.json().catch(() => ({}));
+                        if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+                        return data;
+                    });
+
+                    // 保存成功，导航回仪表板
+                    navigate('/dashboard');
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setIsSaving(false);
+                }
+            };
+
+            // 生成密码
+            const generatePassword = () => {
+                const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+                let result = "";
+                for (let i = 0; i < 16; i++) {
+                    result += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                setPassword(result);
+            };
+
+            // 切换密码可见性
+            const [showPassword, setShowPassword] = useState(false);
+            const togglePasswordVisibility = () => {
+                setShowPassword(!showPassword);
+            };
+
+            return (
+                <div className="bg-background-light dark:bg-background-dark text-[#111418] dark:text-white min-h-screen flex flex-col">
+                    <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-[#e5e7eb] dark:border-[#283039] bg-white dark:bg-[#111418] px-10 py-3 sticky top-0 z-50">
+                        <div className="flex items-center gap-4 text-[#111418] dark:text-white cursor-pointer" onClick={() => navigate('/dashboard')}>
+                            <div className="size-8 text-primary">
+                                <svg className="w-full h-full" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                                    <path clipRule="evenodd" d="M24 18.4228L42 11.475V34.3663C42 34.7796 41.7457 35.1504 41.3601 35.2992L24 42V18.4228Z" fill="currentColor" fillRule="evenodd"></path>
+                                    <path clipRule="evenodd" d="M24 8.18819L33.4123 11.574L24 15.2071L14.5877 11.574L24 8.18819ZM9 15.8487L21 20.4805V37.6263L9 32.9945V15.8487ZM27 37.6263V20.4805L39 15.8487V32.9945L27 37.6263ZM25.354 2.29885C24.4788 1.98402 23.5212 1.98402 22.646 2.29885L4.98454 8.65208C3.7939 9.08038 3 10.2097 3 11.475V34.3663C3 36.0196 4.01719 37.5026 5.55962 38.098L22.9197 44.7987C23.6149 45.0671 24.3851 45.0671 25.0803 44.7987L42.4404 38.098C43.9828 37.5026 45 36.0196 45 34.3663V11.475C45 10.2097 44.2061 9.08038 43.0155 8.65208L25.354 2.29885Z" fill="currentColor" fillRule="evenodd"></path>
+                                </svg>
+                            </div>
+                            <h2 className="text-lg font-bold leading-tight tracking-[-0.015em]">SecureVault</h2>
+                        </div>
+                        <div className="flex flex-1 justify-end gap-8 items-center">
+                            <nav className="hidden md:flex items-center gap-9">
+                                <Link to="/dashboard" className="text-sm font-medium leading-normal hover:text-primary transition-colors">仪表盘</Link>
+                                <a className="text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">全部条目</a>
+                            </nav>
+                            <div className="flex items-center gap-4">
+                                <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-9 ring-2 ring-white/10" style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuBKHX3eSSc3p7JzFK6zSqnNPvltlfk9icWyphmLYzfP9YpgsHZHQQWp68hfZW954ULQe97Wo5EblFWnBkA_-4dyYhzxvWJ3UUkX5gbQYt07dltC9enIteZPW0d4VvGUIC7BNEGUIvy1IKME9gFzKM418CHbJz-lbC3jLpJ59hKFXW1HeVPL5MzwywkJCvEq1XgYyK9SpjqOaIubGJrfw0mS0kGkOPmqYyA5vCWIkZID60rO03TI4JQC9wjTy69ax322axPnvHMU-CT9")'}}></div>
+                            </div>
+                        </div>
+                    </header>
+                    <div className="flex h-full grow flex-col">
+                        <div className="px-4 md:px-40 flex flex-1 justify-center py-8">
+                            <div className="flex flex-col w-full max-w-[800px] flex-1">
+                                <div className="flex flex-wrap gap-2 px-4 pb-2 mb-2">
+                                    <Link to="/dashboard" className="text-[#9dabb9] hover:text-white transition-colors text-sm font-medium leading-normal">密码库</Link>
+                                    <span className="text-[#9dabb9] text-sm font-medium leading-normal">/</span>
+                                    <span className="text-[#111418] dark:text-white text-sm font-medium leading-normal">新增条目</span>
+                                </div>
+                                <div className="flex flex-wrap justify-between gap-3 px-4 pb-6 border-b border-[#283039]">
+                                    <div className="flex min-w-72 flex-col gap-2">
+                                        <h1 className="text-[#111418] dark:text-white tracking-tight text-[32px] font-bold leading-tight">新增密码</h1>
+                                        <p className="text-[#6b7280] dark:text-[#9dabb9] text-sm font-normal leading-normal">为团队密码库创建一个新的安全条目。</p>
+                                    </div>
+                                </div>
+                                <form className="flex flex-col gap-6 px-4 py-8" onSubmit={handleSave}>
+                                    {error && <div className="text-red-500 text-sm font-medium px-4 py-2 bg-red-50 dark:bg-red-900/20 rounded-lg">{error}</div>}
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-[#111418] dark:text-white text-sm font-semibold leading-normal" htmlFor="url">网站地址</label>
+                                        <div className="flex w-full items-stretch rounded-lg group focus-within:ring-2 ring-primary/50 transition-all">
+                                            <div className="text-[#9dabb9] flex items-center justify-center pl-[15px] bg-white dark:bg-[#1c2127] border border-r-0 border-[#d1d5db] dark:border-[#3b4754] rounded-l-lg h-12 w-12">
+                                                <span className="material-symbols-outlined text-[20px]">public</span>
+                                            </div>
+                                            <input 
+                                                className="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-lg text-[#111418] dark:text-white placeholder:text-[#9dabb9] focus:outline-0 border border-[#d1d5db] dark:border-[#3b4754] bg-white dark:bg-[#1c2127] focus:border-primary h-12 p-[15px] text-base font-normal leading-normal border-l-0" 
+                                                id="url" 
+                                                placeholder="https://www.example.com" 
+                                                type="url"
+                                                value={url}
+                                                onChange={(e) => setUrl(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-[#111418] dark:text-white text-sm font-semibold leading-normal" htmlFor="username">用户名 / 邮箱</label>
+                                            <div className="relative">
+                                                <input 
+                                                    className="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-[#111418] dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-[#d1d5db] dark:border-[#3b4754] bg-white dark:bg-[#1c2127] focus:border-primary h-12 px-[15px] text-base font-normal leading-normal transition-all" 
+                                                    id="username" 
+                                                    placeholder="user@company.com"
+                                                    value={username}
+                                                    onChange={(e) => setUsername(e.target.value)}
+                                                />
+                                                <div className="absolute right-3 top-3 text-[#9dabb9]">
+                                                    <span className="material-symbols-outlined text-[20px]">person</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-[#111418] dark:text-white text-sm font-semibold leading-normal flex justify-between" htmlFor="password">
+                                                <span>密码</span>
+                                                <button className="text-primary text-xs font-bold hover:underline flex items-center gap-1" type="button" onClick={generatePassword}>
+                                                    <span className="material-symbols-outlined text-[14px]">autorenew</span> 生成
+                                                </button>
+                                            </label>
+                                            <div className="relative flex items-center">
+                                                <input 
+                                                    className="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-[#111418] dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-[#d1d5db] dark:border-[#3b4754] bg-white dark:bg-[#1c2127] focus:border-primary h-12 px-[15px] pr-10 text-base font-normal leading-normal transition-all" 
+                                                    id="password" 
+                                                    placeholder="必填" 
+                                                    type={showPassword ? 'text' : 'password'}
+                                                    value={password}
+                                                    onChange={(e) => setPassword(e.target.value)}
+                                                />
+                                                <button className="absolute right-3 text-[#9dabb9] hover:text-primary transition-colors flex items-center justify-center" type="button" onClick={togglePasswordVisibility}>
+                                                    <span className="material-symbols-outlined text-[20px]">{showPassword ? 'visibility_off' : 'visibility'}</span>
+                                                </button>
+                                            </div>
+                                            <div className="flex gap-1 mt-1">
+                                                <div className="h-1 flex-1 rounded-full bg-red-500"></div>
+                                                <div className="h-1 flex-1 rounded-full bg-yellow-500"></div>
+                                                <div className="h-1 flex-1 rounded-full bg-[#3b4754]"></div>
+                                                <div className="h-1 flex-1 rounded-full bg-[#3b4754]"></div>
+                                            </div>
+                                            <p className="text-xs text-[#9dabb9]">强度：<span className="text-yellow-500 font-medium">中等</span></p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-[#111418] dark:text-white text-sm font-semibold leading-normal" htmlFor="owner">所属人</label>
+                                            <input 
+                                                className="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-[#111418] dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-[#d1d5db] dark:border-[#3b4754] bg-white dark:bg-[#1c2127] focus:border-primary h-12 px-[15px] text-base font-normal leading-normal transition-all" 
+                                                id="owner" 
+                                                placeholder="可选，如：张三"
+                                                value={owner}
+                                                onChange={(e) => setOwner(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-[#111418] dark:text-white text-sm font-semibold leading-normal" htmlFor="category">分类</label>
+                                            <select 
+                                                className="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-[#111418] dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-[#d1d5db] dark:border-[#3b4754] bg-white dark:bg-[#1c2127] focus:border-primary h-12 px-[15px] text-base font-normal leading-normal transition-all" 
+                                                id="category" 
+                                                value={category}
+                                                onChange={(e) => setCategory(e.target.value)}>
+                                                <option value="">请选择分类</option>
+                                                {categories.map((cat) => (
+                                                    <option key={cat} value={cat}>{cat}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-[#111418] dark:text-white text-sm font-semibold leading-normal" htmlFor="tags">标签（空格或逗号分隔）</label>
+                                            <input 
+                                                className="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-[#111418] dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-[#d1d5db] dark:border-[#3b4754] bg-white dark:bg-[#1c2127] focus:border-primary h-12 px-[15px] text-base font-normal leading-normal transition-all" 
+                                                id="tags" 
+                                                placeholder="work personal"
+                                                value={tags}
+                                                onChange={(e) => setTags(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-[#111418] dark:text-white text-sm font-semibold leading-normal" htmlFor="note">备注</label>
+                                        <textarea 
+                                            className="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-[#111418] dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-[#d1d5db] dark:border-[#3b4754] bg-white dark:bg-[#1c2127] focus:border-primary h-24 px-[15px] py-[10px] text-base font-normal leading-normal transition-all" 
+                                            id="note" 
+                                            placeholder="可选备注信息"
+                                            value={note}
+                                            onChange={(e) => setNote(e.target.value)}
+                                        ></textarea>
+                                    </div>
+                                    <div className="flex justify-end gap-4 mt-4 pt-6 border-t border-[#d1d5db] dark:border-[#283039]">
+                                        <button className="px-6 py-2.5 rounded-lg border border-[#d1d5db] dark:border-[#3b4754] text-[#111418] dark:text-white font-medium hover:bg-gray-100 dark:hover:bg-[#283039] transition-colors" type="button" onClick={() => navigate('/dashboard')}>
+                                            取消
+                                        </button>
+                                        <button 
+                                            className="px-8 py-2.5 rounded-lg bg-primary text-white font-bold hover:bg-blue-600 shadow-lg shadow-primary/25 transition-all flex items-center gap-2" 
+                                            type="submit"
+                                            disabled={isSaving}
+                                        >
+                                            <span className="material-symbols-outlined text-[20px]">{isSaving ? 'hourglass_empty' : 'save'}</span>
+                                            {isSaving ? '保存中...' : '保存条目'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 4. Generator Screen
+        const GeneratorScreen = () => {
+            const navigate = useNavigate();
+            const [length, setLength] = useState(16);
+            const [password, setPassword] = useState("kL9$mP2#xR5!");
+            
+            const generatePassword = () => {
+                const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+                let result = "";
+                for (let i = 0; i < length; i++) {
+                    result += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                setPassword(result);
+            };
+
+            useEffect(() => {
+                generatePassword();
+            }, [length]);
+
+            return (
+                <div className="flex h-screen w-full bg-background-light dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
+                    <aside className="hidden md:flex flex-col w-72 bg-[#111418] border-r border-border-dark flex-shrink-0">
+                        <div className="p-6 flex flex-col gap-2">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="size-8 rounded-lg bg-primary flex items-center justify-center text-white">
+                                    <span className="material-symbols-outlined">shield_lock</span>
+                                </div>
+                                <div>
+                                    <h1 className="text-white text-lg font-bold leading-tight">SecureVault</h1>
+                                    <p className="text-[#9dabb9] text-xs font-normal">企业版</p>
+                                </div>
+                            </div>
+                            <nav className="flex flex-col gap-1">
+                                <Link to="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#9dabb9] hover:bg-[#1c242d] hover:text-white transition-colors">
+                                    <span className="material-symbols-outlined">dashboard</span>
+                                    <span className="text-sm font-medium">仪表盘</span>
+                                </Link>
+                                <Link to="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#9dabb9] hover:bg-[#1c242d] hover:text-white transition-colors">
+                                    <span className="material-symbols-outlined">lock</span>
+                                    <span className="text-sm font-medium">密码库</span>
+                                </Link>
+                                <a href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                                    <span className="material-symbols-outlined filled">vpn_key</span>
+                                    <span className="text-sm font-medium">密码生成器</span>
+                                </a>
+                                <a href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#9dabb9] hover:bg-[#1c242d] hover:text-white transition-colors">
+                                    <span className="material-symbols-outlined">settings</span>
+                                    <span className="text-sm font-medium">设置</span>
+                                </a>
+                            </nav>
+                        </div>
+                        <div className="mt-auto p-6 border-t border-border-dark cursor-pointer" onClick={() => navigate('/')}>
+                            <div className="flex items-center gap-3">
+                                <div className="size-10 rounded-full bg-cover bg-center" style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuDgQjW0udZpLghOQ6DFojh0b-Hh1zDJNhf3S92On6EZtDCzZNzEeGwIY_6aPPBblhR_nsYdG43bi5up1Cxs0X1VYl0FCV-6p8t95HSycKELHhQJhZbDWuAEoqNfT-cBGOE-X6-1LDiVtv26qsfsRQ_1-c73wFO8fgadMpu8MdS9PXyFPDgwhKb_t6UM3mVhGC8XZJLLQxPURuaCiJdvblh0DHi-n4RsriuvZ-pTPbqLSSB9eqXmy55m-uVt1CFZ3IWCGf0wnv_UYoTV")'}}></div>
+                                <div>
+                                    <p className="text-white text-sm font-medium">Alex Morgan</p>
+                                    <p className="text-[#9dabb9] text-xs">Admin</p>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+                    <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+                        <header className="flex items-center justify-between px-6 py-4 border-b border-border-dark bg-[#111418] shrink-0">
+                            <div className="flex items-center gap-4 md:hidden">
+                                <button className="text-white">
+                                    <span className="material-symbols-outlined">menu</span>
+                                </button>
+                                <span className="text-white font-bold text-lg">SecureVault</span>
+                            </div>
+                            <div className="hidden md:flex text-white font-bold text-xl tracking-tight">
+                                Generator Tool
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <button className="flex items-center justify-center size-10 rounded-full hover:bg-surface-dark text-white transition-colors relative">
+                                    <span className="material-symbols-outlined">notifications</span>
+                                    <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full border border-[#111418]"></span>
+                                </button>
+                                <button className="flex items-center gap-2 bg-surface-dark hover:bg-[#2a3441] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-border-dark">
+                                    <span className="material-symbols-outlined text-[20px]">help</span>
+                                    <span>支持</span>
+                                </button>
+                            </div>
+                        </header>
+                        <div className="flex-1 overflow-y-auto p-4 md:p-10">
+                            <div className="max-w-5xl mx-auto flex flex-col gap-8">
+                                <div className="flex flex-col gap-2">
+                                    <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">生成安全密码</h2>
+                                    <p className="text-slate-500 dark:text-[#9dabb9] text-base md:text-lg">为团队账号即时生成强壮、安全的密码。</p>
+                                </div>
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                    <div className="lg:col-span-2 flex flex-col gap-6">
+                                        <div className="bg-white dark:bg-surface-dark rounded-xl p-1 shadow-sm border border-slate-200 dark:border-border-dark">
+                                            <div className="relative flex items-center group">
+                                                <div className="flex-1 px-4 py-6 md:p-8 overflow-hidden">
+                                                    <p className="font-mono text-2xl md:text-4xl text-slate-800 dark:text-white tracking-wider break-all text-center">
+                                                        {password}
+                                                    </p>
+                                                </div>
+                                                <div className="absolute right-2 md:right-4 flex gap-2">
+                                                    <button onClick={generatePassword} className="p-2 text-slate-400 hover:text-primary transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-[#2a3441]" title="重新生成">
+                                                        <span className="material-symbols-outlined">refresh</span>
+                                                    </button>
+                                                    <button className="flex items-center gap-2 bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium shadow-lg shadow-blue-500/20 transition-all active:scale-95" title="复制到剪贴板">
+                                                        <span className="material-symbols-outlined text-[20px]">content_copy</span>
+                                                        <span className="hidden md:inline">复制</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="h-1.5 w-full bg-slate-100 dark:bg-[#111418] rounded-b-xl overflow-hidden">
+                                                <div className="h-full bg-green-500 w-[85%]"></div>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white dark:bg-surface-dark rounded-xl p-6 md:p-8 shadow-sm border border-slate-200 dark:border-border-dark flex flex-col gap-8">
+                                            <div className="flex flex-col gap-4">
+                                                <div className="flex justify-between items-center">
+                                                    <label className="text-slate-900 dark:text-white font-medium">密码长度</label>
+                                                    <div className="bg-slate-100 dark:bg-[#111418] px-3 py-1 rounded-md border border-slate-200 dark:border-border-dark">
+                                                        <span className="text-primary font-bold font-mono">{length}</span>
+                                                    </div>
+                                                </div>
+                                                <input 
+                                                    className="w-full h-2 bg-slate-200 dark:bg-[#283039] rounded-lg appearance-none cursor-pointer" 
+                                                    max="64" min="8" type="range" 
+                                                    value={length} 
+                                                    onChange={(e) => setLength(e.target.value)}
+                                                />
+                                                <div className="flex justify-between text-xs text-slate-400 dark:text-[#586370] font-mono">
+                                                    <span>8</span>
+                                                    <span>32</span>
+                                                    <span>64</span>
+                                                </div>
+                                            </div>
+                                            <div className="w-full h-px bg-slate-100 dark:bg-border-dark"></div>
+                                            <div>
+                                                <label className="text-slate-900 dark:text-white font-medium mb-4 block">使用的字符</label>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <label className="flex items-center gap-3 p-4 rounded-lg border border-slate-200 dark:border-border-dark cursor-pointer hover:bg-slate-50 dark:hover:bg-[#2a3441] transition-colors group">
+                                                        <input defaultChecked className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary dark:bg-[#111418]" type="checkbox"/>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-slate-900 dark:text-white font-medium">ABC</span>
+                                                            <span className="text-xs text-slate-500 dark:text-[#9dabb9]">大写字母</span>
+                                                        </div>
+                                                    </label>
+                                                    <label className="flex items-center gap-3 p-4 rounded-lg border border-slate-200 dark:border-border-dark cursor-pointer hover:bg-slate-50 dark:hover:bg-[#2a3441] transition-colors group">
+                                                        <input defaultChecked className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary dark:bg-[#111418]" type="checkbox"/>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-slate-900 dark:text-white font-medium">abc</span>
+                                                            <span className="text-xs text-slate-500 dark:text-[#9dabb9]">小写字母</span>
+                                                        </div>
+                                                    </label>
+                                                    <label className="flex items-center gap-3 p-4 rounded-lg border border-slate-200 dark:border-border-dark cursor-pointer hover:bg-slate-50 dark:hover:bg-[#2a3441] transition-colors group">
+                                                        <input defaultChecked className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary dark:bg-[#111418]" type="checkbox"/>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-slate-900 dark:text-white font-medium">123</span>
+                                                            <span className="text-xs text-slate-500 dark:text-[#9dabb9]">数字</span>
+                                                        </div>
+                                                    </label>
+                                                    <label className="flex items-center gap-3 p-4 rounded-lg border border-slate-200 dark:border-border-dark cursor-pointer hover:bg-slate-50 dark:hover:bg-[#2a3441] transition-colors group">
+                                                        <input defaultChecked className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary dark:bg-[#111418]" type="checkbox"/>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-slate-900 dark:text-white font-medium">!@#</span>
+                                                            <span className="text-xs text-slate-500 dark:text-[#9dabb9]">符号</span>
+                                                        </div>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-6">
+                                        <div className="bg-primary/10 border border-primary/20 rounded-xl p-6">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <span className="material-symbols-outlined text-primary">verified_user</span>
+                                                <h3 className="text-slate-900 dark:text-white font-bold">非常强</h3>
+                                            </div>
+                                            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                                                该密码需计算机约 <span className="text-slate-900 dark:text-white font-medium">3400 万年</span> 才能破解。
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                <span className="px-2 py-1 rounded bg-background-light dark:bg-[#111418] text-xs font-mono text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-border-dark">{length} 个字符</span>
+                                                <span className="px-2 py-1 rounded bg-background-light dark:bg-[#111418] text-xs font-mono text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-border-dark">大小写混合</span>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-border-dark overflow-hidden flex-1">
+                                            <div className="p-4 border-b border-slate-200 dark:border-border-dark flex justify-between items-center">
+                                                <h3 className="font-bold text-slate-900 dark:text-white">最近生成</h3>
+                                                <button className="text-xs text-primary hover:underline">清空</button>
+                                            </div>
+                                            <div className="flex flex-col divide-y divide-slate-100 dark:divide-border-dark">
+                                                <div className="p-4 flex items-center justify-between group hover:bg-slate-50 dark:hover:bg-[#2a3441] transition-colors cursor-pointer">
+                                                    <div className="flex flex-col gap-1 overflow-hidden">
+                                                        <p className="font-mono text-sm text-slate-600 dark:text-slate-300 truncate">H8s!kL9$mP2</p>
+                                                        <span className="text-[10px] text-slate-400 uppercase tracking-wider">刚刚</span>
+                                                    </div>
+                                                </div>
+                                                <div className="p-4 flex items-center justify-between group hover:bg-slate-50 dark:hover:bg-[#2a3441] transition-colors cursor-pointer">
+                                                    <div className="flex flex-col gap-1 overflow-hidden">
+                                                        <p className="font-mono text-sm text-slate-600 dark:text-slate-300 truncate">Tr4#bX9@qL2</p>
+                                                        <span className="text-[10px] text-slate-400 uppercase tracking-wider">2 分钟前</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        // --- CUSTOM HOOKS ---
+
+        // 分类列表管理Hook
+        const useCategories = () => {
+            const [categories, setCategories] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+
+            // 获取分类列表
+            const fetchCategories = async () => {
+                setLoading(true);
+                setError(null);
+                try {
+                    const res = await fetch('/api/categories', {
+                        headers: { 'Authorization': `Bearer ${window.AUTH_TOKEN}` }
+                    });
+                    if (!res.ok) throw new Error('获取分类列表失败');
+                    const data = await res.json();
+                    setCategories(data.categories || []);
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // 添加分类
+            const addCategory = async (category) => {
+                try {
+                    const res = await fetch('/api/categories', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${window.AUTH_TOKEN}`
+                        },
+                        body: JSON.stringify({ category })
+                    });
+                    if (!res.ok) throw new Error('添加分类失败');
+                    // 重新获取分类列表
+                    await fetchCategories();
+                    return true;
+                } catch (err) {
+                    setError(err.message);
+                    return false;
+                }
+            };
+
+            // 删除分类
+            const deleteCategory = async (category) => {
+                try {
+                    const res = await fetch(`/api/categories/${encodeURIComponent(category)}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Bearer ${window.AUTH_TOKEN}` }
+                    });
+                    if (!res.ok) throw new Error('删除分类失败');
+                    // 重新获取分类列表
+                    await fetchCategories();
+                    return true;
+                } catch (err) {
+                    setError(err.message);
+                    return false;
+                }
+            };
+
+            // 初始化时获取分类列表
+            useEffect(() => {
+                if (window.AUTH_TOKEN) {
+                    fetchCategories();
+                }
+            }, []);
+
+            return { categories, loading, error, fetchCategories, addCategory, deleteCategory };
+        };
+
+        // 7. Categories Screen
+        const CategoriesScreen = () => {
+            const navigate = useNavigate();
+            const { categories, loading, error, addCategory, deleteCategory } = useCategories();
+            const [newCategoryName, setNewCategoryName] = useState('');
+            const [isAdding, setIsAdding] = useState(false);
+            const [addError, setAddError] = useState('');
+
+            const handleAddCategory = async (e) => {
+                e.preventDefault();
+                if (!newCategoryName.trim()) {
+                    setAddError('分类名称不能为空');
+                    return;
+                }
+
+                setIsAdding(true);
+                setAddError('');
+                try {
+                    await addCategory(newCategoryName.trim());
+                    setNewCategoryName('');
+                } catch (err) {
+                    setAddError(err.message);
+                } finally {
+                    setIsAdding(false);
+                }
+            };
+
+            const handleDeleteCategory = async (categoryName) => {
+                if (window.confirm(`确定要删除分类 "${categoryName}" 吗？`)) {
+                    await deleteCategory(categoryName);
+                }
+            };
+
+            return (
+                <div className="flex h-screen w-full bg-background-light dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
+                    {/* Sidebar */}
+                    <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark">
+                        {/* Sidebar content (same as Dashboard) */}
+                        <div className="flex flex-col h-full p-4">
+                            <div className="flex items-center gap-3 px-2 py-4 mb-6">
+                                <div className="size-10 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-primary/20">
+                                    <span className="material-symbols-outlined text-white text-[20px] font-bold">key</span>
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-black text-white">SecureVault</h1>
+                                    <p className="text-xs text-slate-500">安全密码管理</p>
+                                </div>
+                            </div>
+                            <nav className="flex-1 flex flex-col gap-2">
+                                <Link to="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                    <span className="material-symbols-outlined text-[20px]">home</span>
+                                    <span className="text-sm font-medium">密码库</span>
+                                </Link>
+                                <Link to="/add" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors">
+                                    <span className="material-symbols-outlined text-[20px]">add</span>
+                                    <span className="text-sm font-medium">添加密码</span>
+                                </Link>
+                                <Link to="/generator" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-colors group">
+                                    <span className="material-symbols-outlined">vpn_key</span>
+                                    <span className="text-sm font-medium">生成器</span>
+                                </Link>
+                                <Link to="/categories" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary group">
+                                    <span className="material-symbols-outlined">category</span>
+                                    <span className="text-sm font-medium">分类管理</span>
+                                </Link>
+                                <div className="h-px bg-border-dark my-2 mx-3"></div>
+                                <a href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-white transition-colors group">
+                                    <span className="material-symbols-outlined">health_and_safety</span>
+                                    <span className="text-sm font-medium">密码库健康</span>
+                                </a>
+                                <a href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-white transition-colors group">
+                                    <span className="material-symbols-outlined">delete</span>
+                                    <span className="text-sm font-medium">回收站</span>
+                                </a>
+                            </nav>
+                            <div className="mt-auto">
+                                <button className="flex w-full items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-white transition-colors">
+                                    <span className="material-symbols-outlined">settings</span>
+                                    <span className="text-sm font-medium">设置</span>
+                                </button>
+                                <div className="flex items-center gap-3 px-3 py-4 mt-2 border-t border-border-dark cursor-pointer" onClick={() => navigate('/')}>
+                                    <div className="size-9 rounded-full bg-cover bg-center" style={{backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuAQESKyOVxorzyAg6JaN3VU86IeuZkC-5NY_NrGWKrRXH4XSlnDiTO6qUunHXVUumKcilqQQSqeudNn0DhmWlFUxRNdYCOXqN0nzMR73S5vZ8QSak0P284SwR27uHDpw92OSwLbd5UNWQmui-1zn7Za1N3wHv6EEORvZe99X7A64dNM4T-vKux7FVVcJA4rGnJOsByV97YPYS5_7PyFb3lrebMm8KY-tn7Q-XAXDD8QjsxNcc9duoWjboU5yALXSIZ7lZDarLf2OCXP')"}}></div>
+                                    <div className="flex flex-col min-w-0">
+                                        <p className="text-sm font-medium text-white truncate">Alex Morgan</p>
+                                        <p className="text-xs text-slate-500 truncate">alex.m@company.com</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+                    <main className="flex-1 flex flex-col min-w-0 bg-background-light dark:bg-background-dark relative">
+                        <header className="h-16 flex items-center justify-between px-6 border-b border-border-dark bg-background-dark z-20 shrink-0">
+                            <div className="flex items-center gap-4 lg:hidden">
+                                <button className="text-slate-400 hover:text-white">
+                                    <span className="material-symbols-outlined">menu</span>
+                                </button>
+                                <span className="text-white font-bold text-lg">SecureVault</span>
+                            </div>
+                            <div className="hidden md:flex flex-1 max-w-xl mx-4">
+                                <div className="relative w-full group">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 group-focus-within:text-primary">
+                                        <span className="material-symbols-outlined text-[20px]">search</span>
+                                    </div>
+                                    <input className="block w-full pl-10 pr-3 py-2 border-none rounded-lg leading-5 bg-surface-dark text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm h-10 transition-all" placeholder="搜索密码库（如：Github、AWS、财务）..." type="text"/>
+                                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center">
+                                        <kbd className="inline-flex items-center border border-slate-700 rounded px-2 text-xs font-sans font-medium text-slate-500">⌘K</kbd>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button className="p-2 text-slate-400 hover:text-white hover:bg-surface-dark rounded-lg relative">
+                                    <span className="material-symbols-outlined">notifications</span>
+                                    <span className="absolute top-2 right-2 size-2 bg-primary rounded-full border-2 border-background-dark"></span>
+                                </button>
+                            </div>
+                        </header>
+                        <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+                            <div className="max-w-4xl mx-auto">
+                                <div className="bg-surface-dark border border-border-dark rounded-xl p-8 shadow-xl shadow-black/20">
+                                    <h2 className="text-2xl font-black text-white mb-6">分类管理</h2>
+                                    
+                                    {/* 添加分类表单 */}
+                                    <div className="bg-surface-dark border border-border-dark rounded-lg p-6 mb-8">
+                                        <h3 className="text-lg font-semibold text-white mb-4">添加新分类</h3>
+                                        <form onSubmit={handleAddCategory} className="flex gap-3">
+                                            <input
+                                                type="text"
+                                                value={newCategoryName}
+                                                onChange={(e) => setNewCategoryName(e.target.value)}
+                                                placeholder="输入分类名称"
+                                                className="flex-1 bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:outline-none focus:ring-1 focus:ring-primary"
+                                                disabled={isAdding}
+                                            />
+                                            <button
+                                                type="submit"
+                                                className="bg-primary hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                disabled={isAdding}
+                                            >
+                                                {isAdding ? '添加中...' : '添加'}
+                                            </button>
+                                        </form>
+                                        {addError && (
+                                            <p className="text-red-400 text-sm mt-3">{addError}</p>
+                                        )}
+                                    </div>
+
+                                    {/* 分类列表 */}
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-white mb-4">现有分类</h3>
+                                        {loading ? (
+                                            <p className="text-slate-400">加载中...</p>
+                                        ) : error ? (
+                                            <p className="text-red-400">{error}</p>
+                                        ) : categories.length === 0 ? (
+                                            <p className="text-slate-400">暂无分类，请先添加</p>
+                                        ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                {categories.map((category) => (
+                                                    <div key={category} className="flex items-center justify-between bg-background-dark border border-border-dark rounded-lg p-4">
+                                                        <span className="text-white font-medium">{category}</span>
+                                                        <button
+                                                            onClick={() => handleDeleteCategory(category)}
+                                                            className="text-red-400 hover:text-red-300 p-2 rounded-lg hover:bg-red-400/10 transition-colors"
+                                                            title="删除分类"
+                                                        >
+                                                            <span className="material-symbols-outlined">delete</span>
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        // --- MAIN APP ---
+
+        const App = () => {
+            return (
+                <MemoryRouter>
+                    <Routes>
+                        <Route path="/" element={<LoginScreen />} />
+                        <Route path="/dashboard" element={<DashboardScreen />} />
+                        <Route path="/add" element={<AddPasswordScreen />} />
+                        <Route path="/generator" element={<GeneratorScreen />} />
+                        <Route path="/entry/:id" element={<EntryDetailScreen />} />
+                        <Route path="/entry/:id/edit" element={<EntryEditScreen />} />
+                        <Route path="/categories" element={<CategoriesScreen />} />
+                    </Routes>
+                </MemoryRouter>
+            );
+        };
+
+        // 确保React和Babel加载完成后再渲染应用
+        function initReactApp() {
+            if (window.React && window.ReactDOM && window.Babel) {
+                try {
+                    // 尝试使用React 18的createRoot方法
+                    if (window.ReactDOM.createRoot) {
+                        const root = window.ReactDOM.createRoot(document.getElementById('root'));
+                        root.render(<App />);
+                    } else {
+                        // 如果createRoot不可用，使用旧的render方法
+                        window.ReactDOM.render(<App />, document.getElementById('root'));
+                    }
+                } catch (e) {
+                    console.error('React应用渲染失败:', e);
+                    // 如果React渲染失败，显示回退界面
+                    renderFallback();
+                }
+            } else {
+                // 如果React还没加载完成，1秒后重试
+                setTimeout(initReactApp, 1000);
+            }
+        }
+
+        // 初始化React应用
+        initReactApp();
+    </script>
+</body>
+</html>

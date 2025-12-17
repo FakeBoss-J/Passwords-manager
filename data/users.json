@@ -1,0 +1,14 @@
+{
+  "FakeBoss": {
+    "salt": "4e228a38f1e4c431f846541985fe738f",
+    "hash": "53545bfb3e638aea429b221d534a6458fa2bf02ee57553493e714e9638a514c6",
+    "iterations": 120000,
+    "createdAt": "2025-12-15T05:41:53.372Z"
+  },
+  "15924132088": {
+    "salt": "c50d23f7f5e51c6f91bbc8e1e3f98ef0",
+    "hash": "2fcf12d3ac31a15a65ed99a2a0a47e676b2bc5d3faaf4cac700862663b6dd515",
+    "iterations": 120000,
+    "createdAt": "2025-12-15T10:37:04.352Z"
+  }
+}
